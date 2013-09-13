@@ -1,0 +1,21 @@
+---
+driver_plugin: openvz
+driver_config:
+  require_chef_omnibus: true
+
+platforms:
+- name: ubuntu-13.04
+  driver_config:
+     network: 10.2.2.0/24
+     template: ubuntu-1304-x86
+     memory_mb: 64
+     openvz_opts:
+       cpus: 2
+     before_provision: |
+        apt-get install wget curl -y
+
+
+suites:
+- name: default
+  run_list: []
+  attributes: {}
