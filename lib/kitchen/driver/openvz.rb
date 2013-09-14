@@ -139,7 +139,7 @@ module Kitchen
       end
 
       def allocate_ip(ip, not_in)
-        return ip.to_s if not_in.empty?
+        return "#{ip.to_s}/#{ip.get_cid}" if not_in.empty?
         start = ip.to_range.to_a.map { |s| s.to_s } - [ip.to_s] # exclude broadcast
         free = start - not_in
         raise "* No free ips in range: #{start}" if free.empty?
