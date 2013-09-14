@@ -11,7 +11,7 @@ platforms:
      memory_mb: 64
      openvz_opts:
        cpus: 2
-     before_provision: |
+     before_converge: |
         apt-get install wget curl -y
 
 

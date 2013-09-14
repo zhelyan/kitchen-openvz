@@ -4,7 +4,7 @@ require "ipaddr"
 
 class IPAddr
   def get_mask
-    self.instance_eval{ _to_string(@mask_addr)}
+    self.instance_eval { _to_string(@mask_addr) }
   end
 
   def get_cid
@@ -19,9 +19,8 @@ module Kitchen
       no_parallel_for :create
 
       CONTAINER_ROOT = "/vz/root".freeze
-      PK_PATT = '~/.ssh/*.pub'.freeze
 
-      default_config :use_sudo, false
+      default_config :use_sudo, true
       default_config :port, 22
       default_config :username, "root"
       default_config :password, "root"
@@ -35,11 +34,12 @@ module Kitchen
         raise("! Please specify template") if !config[:template]
 
         state[:ctid] = config[:ctid] = auto_ctid()
-        state[:hostname] = config[:hostname] || auto_ip()
+        network = config[:hostname] || auto_ip()
+        state[:hostname]= network.split("/").first
 
         info("Creating OpenVZ container #{config[:ctid]}")
         run_command("vzctl create #{config[:ctid]} --ostemplate #{config[:template]}")
-        run_command("vzctl set #{config[:ctid]} --ipadd #{state[:hostname]} --save")
+        run_command("vzctl set #{config[:ctid]} --ipadd #{network} --save")
 
         #any vz options
         set_openvz_opts()
@@ -56,12 +56,12 @@ module Kitchen
         setup_pk_auth()
 
         # do this until kitchen is fixed to wait properly for sshd
-        i = 0
-        unless `vzctl exec #{config[:ctid]} ps -ef | grep sshd` =~ /\/sshd/
-          puts "waiting for sshd"
+        0.upto(5) do |n|
+          puts "waiting for sshd (#{n})"
+          break if `vzctl exec #{config[:ctid]} ps -ef | grep sshd` =~ /\/sshd/
           sleep(2)
         end
-        sleep(7)
+        sleep(5)
         ############################################################
 
         # run after boot customization
@@ -69,7 +69,6 @@ module Kitchen
 
         wait_for_sshd(state[:hostname])
       end
-
 
 
       def destroy(state)
@@ -91,23 +90,25 @@ module Kitchen
       end
 
 
-
       def setup_pk_auth
-        pub_key =  Dir["#{File.expand_path(PK_PATT)}"].first
-        unless pub_key
+
+        unless File.exists? config[:ssh_public_key]
           puts "* No identities found, skipping PK auth"
           return
         end
         container_root = "#{CONTAINER_ROOT}/#{config[:ctid]}"
         run_command("mkdir -p #{container_root}/root/.ssh")
         run_command("chmod 0700 #{container_root}/root/.ssh")
-        run_command("cp #{pub_key} #{container_root}/root/.ssh/authorized_keys")
+        run_command("cp #{config[:ssh_public_key]} #{container_root}/root/.ssh/authorized_keys")
         run_command("chmod 0644 #{container_root}/root/.ssh/authorized_keys")
       end
 
       def before_provision
         if config[:before_provision]
-          run_command("vzctl exec #{config[:ctid]} #{config[:before_provision].split(/\r?\n/).join('; ')}")
+          puts '* Running [before_provision] commands::'
+          config[:before_provision].split(/\r?\n/).each do |cmd|
+            run_command("vzctl exec #{config[:ctid]} #{cmd}")
+          end
         end
       end
 
@@ -139,8 +140,8 @@ module Kitchen
 
       def allocate_ip(ip, not_in)
         return ip.to_s if not_in.empty?
-        start = ip.to_range.to_a.map{|s| s.to_s} - [ip.to_s]  # exclude broadcast
-        free =  start - not_in
+        start = ip.to_range.to_a.map { |s| s.to_s } - [ip.to_s] # exclude broadcast
+        free = start - not_in
         raise "* No free ips in range: #{start}" if free.empty?
         "#{free.first}/24"
       end
