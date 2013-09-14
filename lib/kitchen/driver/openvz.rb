@@ -65,7 +65,7 @@ module Kitchen
         ############################################################
 
         # run after boot customization
-        before_provision()
+        before_converge()
 
         wait_for_sshd(state[:hostname])
       end
@@ -103,10 +103,10 @@ module Kitchen
         run_command("chmod 0644 #{container_root}/root/.ssh/authorized_keys")
       end
 
-      def before_provision
-        if config[:before_provision]
-          puts '* Running [before_provision] commands::'
-          config[:before_provision].split(/\r?\n/).each do |cmd|
+      def before_converge
+        if config[:before_converge]
+          puts '* Running [before_converge] commands::'
+          config[:before_converge].split(/\r?\n/).each do |cmd|
             run_command("vzctl exec #{config[:ctid]} #{cmd}")
           end
         end
