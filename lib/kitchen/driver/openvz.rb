@@ -33,7 +33,7 @@ module Kitchen
 
         raise("! Please specify template") if !config[:template]
 
-        state[:ctid] = config[:ctid] = auto_ctid()
+        state[:ctid] = config[:ctid] || auto_ctid()
         network = config[:hostname] || auto_ip()
         state[:hostname]= network.split("/").first
 
