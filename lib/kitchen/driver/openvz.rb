@@ -29,9 +29,14 @@ module Kitchen
 
       default_config :container_path, "/vz/template/cache"
 
+
+      def verify_dependencies
+          raise UserError, "You need to install OpenVZ first" if !system('which vzctl')
+      end
+
       def create(state)
 
-        raise("! Please specify template") if !config[:template]
+        raise UserError, "! Please specify template" if !config[:template]
 
         state[:ctid] = config[:ctid] || auto_ctid()
         network = config[:hostname] || auto_ip()
@@ -73,7 +78,6 @@ module Kitchen
 
       def destroy(state)
         if state[:ctid] && File.directory?("#{CONTAINER_ROOT}/#{state[:ctid]}")
-          info("Destroying container #{state[:ctid]}, template: #{state[:template]}")
           run_command("vzctl stop #{state[:ctid]}")
           run_command("vzctl destroy #{state[:ctid]}")
         end
@@ -91,7 +95,6 @@ module Kitchen
 
 
       def setup_pk_auth
-
         unless File.exists? config[:ssh_public_key]
           puts "* No identities found, skipping PK auth"
           return
@@ -122,12 +125,12 @@ module Kitchen
       def auto_ctid
         r = `vzlist -o ctid -H -a`
         return 1 if r.empty? # stderr not captured, assuming no containers created
-        taken_ids = r.split(/\r?\n/).map { |e| e.to_i }
-        allocate_ctid(taken_ids)
+        allocate_ctid(r.split(/\r?\n/))
       end
 
-      def allocate_ctid(not_in)
-        orphan = not_in.sort.find { |p| !not_in.include?(p+1) }
+      def allocate_ctid(allocated_ctids)
+        allocated_ctids = allocated_ctids.map { |e| e.to_i }
+        orphan = allocated_ctids.sort.find { |p| !allocated_ctids.include?(p+1) }
         orphan.to_i + 1
       end
 
@@ -142,7 +145,7 @@ module Kitchen
         return "#{ip.to_s}/#{ip.get_cid}" if not_in.empty?
         start = ip.to_range.to_a.map { |s| s.to_s } - [ip.to_s] # exclude broadcast
         free = start - not_in
-        raise "* No free ips in range: #{start}" if free.empty?
+        raise ActionFailed, "* No free ips in range: #{start}" if free.empty?
         "#{free.first}/24"
       end
 
