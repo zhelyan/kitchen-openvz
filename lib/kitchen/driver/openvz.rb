@@ -15,7 +15,8 @@ module Kitchen
       default_config :customize, { :memory => 256, :swap => 512, :vcpu => 1 }
       default_config :port, 22
       default_config :username, 'root'
-      default_config :password, 'root'
+      default_config :ssh_key, '/root/.ssh/id_rsa'
+      default_config :ssh_public_key, '/root/.ssh/id_rsa.pub'
       default_config :openvz_home, '/vz'
 
       def create(state)
@@ -24,6 +25,8 @@ module Kitchen
         create_container(state)
         start_container(state)
         wait_for_sshd(state[:hostname])
+        # If ssh is responding then the template has been exploded so we can deploy the ssh key
+        deploy_ssh_key(state)
       end
 
       def destroy(state)
@@ -86,9 +89,6 @@ module Kitchen
         info("Setting IP address of container #{state[:container_id]} to #{state[:hostname]}")
         set_container_option(state[:container_id], 'ipadd', state[:hostname])
 
-        info("Setting root account details on container #{state[:container_id]}")
-        set_container_option(state[:container_id], 'userpasswd', "#{config[:username]}:#{config[:password]}")
-
         info("Setting RAM limit on container #{state[:container_id]} to #{config[:customize][:memory]}")
         set_container_option(state[:container_id], 'ram', "#{config[:customize][:memory]}M")
 
@@ -111,6 +111,16 @@ module Kitchen
       def start_container(state)
         info("Starting OpenVZ container #{state[:container_id]}")
         run_command("vzctl start #{state[:container_id]}")
+      end
+
+      def deploy_ssh_key(state)
+        ssh_dir = File.join(config[:openvz_home], 'root', state[:container_id].to_s, 'root', '.ssh')
+        run_command("mkdir -p #{ssh_dir}")
+        run_command("chmod 0700 #{ssh_dir}")
+
+        authorized_keys_path = File.join(ssh_dir, 'authorized_keys')
+        run_command("cp #{config[:ssh_public_key]} #{authorized_keys_path}")
+        run_command("chmod 0644 #{authorized_keys_path}")
       end
     end
   end
