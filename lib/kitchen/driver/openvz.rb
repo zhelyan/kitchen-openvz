@@ -30,7 +30,7 @@ module Kitchen
       end
 
       def destroy(state)
-        if state[:container_id] && container_exists(state)
+        if state[:container_id] && container_exists(state[:container_id])
           debug("Destroying container #{state[:container_id]}")
           run_command("vzctl stop #{state[:container_id]}")
           run_command("vzctl destroy #{state[:container_id]}")
@@ -75,7 +75,8 @@ module Kitchen
 
       def create_container(state)
         if !File.exists?(File.join(config[:openvz_home], "/template/cache/#{instance.platform.name}.tar.gz"))
-          raise "OpenVZ template #{instance.platform.name} does not exist"
+          info("OpenVZ template #{instance.platform.name} does not currently exist, will attempt to download...")
+          download_template(instance.platform.name)
         end
 
         info("Creating OpenVZ container #{state[:container_id]} from template #{instance.platform.name}")
@@ -86,21 +87,25 @@ module Kitchen
 
       def configure_container(state)
         container_id = state[:container_id]
-        info("Setting IP address of container #{state[:container_id]} to #{state[:hostname]}")
-        set_container_option(state[:container_id], 'ipadd', state[:hostname])
+        info("Setting IP address of container #{container_id} to #{state[:hostname]}")
+        set_container_option(container_id, 'ipadd', state[:hostname])
 
-        info("Setting RAM limit on container #{state[:container_id]} to #{config[:customize][:memory]}")
-        set_container_option(state[:container_id], 'ram', "#{config[:customize][:memory]}M")
+        hostname = "server#{container_id}.example.com"
+        info("Setting hostname of container #{container_id} to #{hostname}")
+        set_container_option(container_id, 'hostname', hostname)
 
-        info("Setting swap limit on container #{state[:container_id]} to #{config[:customize][:swap]}")
-        set_container_option(state[:container_id], 'swap', "#{config[:customize][:swap]}M")
+        info("Setting RAM limit on container #{container_id} to #{config[:customize][:memory]}")
+        set_container_option(container_id, 'ram', "#{config[:customize][:memory]}M")
 
-        info("Setting CPU count on container #{state[:container_id]} to #{config[:customize][:vcpu]}")
-        set_container_option(state[:container_id], 'cpus', config[:customize][:vcpu])
+        info("Setting swap limit on container #{container_id} to #{config[:customize][:swap]}")
+        set_container_option(container_id, 'swap', "#{config[:customize][:swap]}M")
 
-        info("Setting custom properties #{config[:openvz_opts]} on container #{state[:container_id]}")
+        info("Setting CPU count on container #{container_id} to #{config[:customize][:vcpu]}")
+        set_container_option(container_id, 'cpus', config[:customize][:vcpu])
+
+        info("Setting custom properties #{config[:openvz_opts]} on container #{container_id}")
         config[:openvz_opts].each_pair do |option, value|
-          set_container_option(state[:container_id], option, value)
+          set_container_option(container_id, option, value)
         end if config[:openvz_opts]
       end
 
@@ -123,10 +128,19 @@ module Kitchen
         run_command("chmod 0644 #{authorized_keys_path}")
       end
 
-      def container_exists(state)
+      def container_exists(id)
         output = run_command('vzlist -o ctid -H -a')
         ids = output.to_s.lines.map { |line| line.to_i }
-        ids.include?(state[:container_id])
+        ids.include?(id)
+      end
+
+      OPENVZ_TEMPLATE_URL = 'http://download.openvz.org/template/precreated/'.freeze
+
+      def download_template(name)
+        template_directory = File.join(config[:openvz_home], 'template', 'cache')
+        download_url = "#{OPENVZ_TEMPLATE_URL}/#{name}.tar.gz"
+        debug("Downloading OpenVZ template #{name} from #{download_url}")
+        run_command("wget #{download_url} -P #{template_directory}")
       end
     end
   end
