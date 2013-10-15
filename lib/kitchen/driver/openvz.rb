@@ -1,169 +1,117 @@
-require "kitchen"
-require "ipaddr"
-
-
-class IPAddr
-  def get_mask
-    self.instance_eval { _to_string(@mask_addr) }
-  end
-
-  def get_cid
-    IPAddr.new(get_mask).to_i.to_s(2).count("1")
-  end
-end
+require 'kitchen'
+require 'ipaddr'
+require 'ipaddress'
+require 'net/http'
 
 module Kitchen
   module Driver
     class Openvz < Kitchen::Driver::SSHBase
+      DEFAULT_CONTAINER_ID = 101
+      DEFAULT_CONTAINER_IP_ADDRESS = '10.1.1.1'
 
       no_parallel_for :create
 
-      CONTAINER_ROOT = "/vz/root".freeze
-
       default_config :use_sudo, true
+      default_config :customize, { :memory => 256, :swap => 512, :vcpu => 1 }
       default_config :port, 22
-      default_config :username, "root"
-      default_config :password, "root"
-      default_config :ssh_key, "/root/.ssh/id_rsa"
-      default_config :ssh_public_key, "/root/.ssh/id_rsa.pub"
-
-      default_config :container_path, "/vz/template/cache"
+      default_config :username, 'root'
+      default_config :password, 'root'
+      default_config :openvz_home, '/vz'
 
       def create(state)
-
-        raise("! Please specify template") if !config[:template]
-
-        state[:ctid] = config[:ctid] || auto_ctid()
-        network = config[:hostname] || auto_ip()
-        state[:hostname]= network.split("/").first
-
-        info("Creating OpenVZ container #{config[:ctid]}")
-        run_command("vzctl create #{config[:ctid]} --ostemplate #{config[:template]}")
-        run_command("vzctl set #{config[:ctid]} --ipadd #{network} --save")
-
-        #any vz options
-        set_openvz_opts()
-        # override with explicit usr/pass if given
-        set_option('userpasswd', "#{config[:username]}:#{config[:password]}")
-
-        set_memory()
-        setup_nat()
-
-        info("Starting OpenVZ container ID:#{config[:ctid]}, hostname:: #{state[:hostname]}")
-        run_command("vzctl start #{config[:ctid]}")
-
-        # has to be done after start
-        setup_pk_auth()
-
-        # do this until kitchen is fixed to wait properly for sshd
-        0.upto(5) do |n|
-          puts "waiting for sshd (#{n})"
-          break if `vzctl exec #{config[:ctid]} ps -ef | grep sshd` =~ /\/sshd/
-          sleep(2)
-        end
-        sleep(5)
-        ############################################################
-
-        # run after boot customization
-        before_converge()
-
+        state[:container_id] = config[:container_id] || next_container_id
+        state[:hostname] = config[:hostname] || next_ip_address
+        create_container(state)
+        start_container(state)
         wait_for_sshd(state[:hostname])
       end
 
-
       def destroy(state)
-        if state[:ctid] && File.directory?("#{CONTAINER_ROOT}/#{state[:ctid]}")
-          info("Destroying container #{state[:ctid]}, template: #{state[:template]}")
-          run_command("vzctl stop #{state[:ctid]}")
-          run_command("vzctl destroy #{state[:ctid]}")
+        if state[:container_id]
+          debug("Destroying container #{state[:container_id]}")
+          run_command("vzctl stop #{state[:container_id]}")
+          run_command("vzctl destroy #{state[:container_id]}")
         end
       end
 
+      private
 
-      def set_memory
-        if config[:memory_mb]
-          basemem = mb_to_pages(config[:memory_mb])
-          totalmem = basemem + mb_to_pages(8)
-          set_option('vmguarpages', basemem)
-          set_option('oomguarpages ', totalmem)
+      def next_container_id
+        info('Generating next container id in sequence')
+        output = run_command('vzlist -o ctid -H -a')
+        taken_ids = output.to_s.lines.map { |line| line.to_i }
+        if taken_ids.any?
+          new_id = taken_ids.max + 1
+          debug("Generated new container id #{new_id}")
+          new_id
+        else
+          debug("No existing containers found, using default id #{DEFAULT_CONTAINER_ID}")
+          DEFAULT_CONTAINER_ID
         end
       end
 
-
-      def setup_pk_auth
-
-        unless File.exists? config[:ssh_public_key]
-          puts "* No identities found, skipping PK auth"
-          return
-        end
-        container_root = "#{CONTAINER_ROOT}/#{config[:ctid]}"
-        run_command("mkdir -p #{container_root}/root/.ssh")
-        run_command("chmod 0700 #{container_root}/root/.ssh")
-        run_command("cp #{config[:ssh_public_key]} #{container_root}/root/.ssh/authorized_keys")
-        run_command("chmod 0644 #{container_root}/root/.ssh/authorized_keys")
-      end
-
-      def before_converge
-        if config[:before_converge]
-          puts '* Running [before_converge] commands::'
-          config[:before_converge].split(/\r?\n/).each do |cmd|
-            run_command("vzctl exec #{config[:ctid]} #{cmd}")
-          end
+      def next_ip_address
+        info('Generating next IP address in sequence')
+        output = run_command('vzlist -o ip -H -a')
+        taken_ips = parse_ip_addresses(output)
+        if taken_ips.any?
+          new_ip = taken_ips.max.succ.to_s
+          debug("Generated new IP address #{new_ip}")
+          new_ip
+        else
+          debug("No existing IP addresses found, using default #{DEFAULT_CONTAINER_IP_ADDRESS}")
+          DEFAULT_CONTAINER_IP_ADDRESS
         end
       end
 
-      def setup_nat()
-        # not my business :-)
-        #if config[:nat]
-        #  #run_command("iptables -t nat -A POSTROUTING -o eth0 -j SNAT --to 192.168.2.83")
-        #end
+      def parse_ip_addresses(content)
+        valid_ips = content.to_s.lines.select { |line| IPAddress.valid?(line) }
+        debug("Parsing IP addresses: #{valid_ips}")
+        valid_ips.map { |ip| IPAddr.new(ip.chomp) }
       end
 
-      def auto_ctid
-        r = `vzlist -o ctid -H -a`
-        return 1 if r.empty? # stderr not captured, assuming no containers created
-        taken_ids = r.split(/\r?\n/).map { |e| e.to_i }
-        allocate_ctid(taken_ids)
-      end
-
-      def allocate_ctid(not_in)
-        orphan = not_in.sort.find { |p| !not_in.include?(p+1) }
-        orphan.to_i + 1
-      end
-
-      def auto_ip
-        ip = IPAddr.new('10.1.1.0/24')
-        r = `vzlist -o ip -H -a`
-        allocated_ips = r.split(/\r?\n/).sort
-        allocate_ip(ip, allocated_ips)
-      end
-
-      def allocate_ip(ip, not_in)
-        return "#{ip.to_s}/#{ip.get_cid}" if not_in.empty?
-        start = ip.to_range.to_a.map { |s| s.to_s } - [ip.to_s] # exclude broadcast
-        free = start - not_in
-        raise "* No free ips in range: #{start}" if free.empty?
-        "#{free.first}/24"
-      end
-
-      def set_openvz_opts
-        return if !config[:openvz_opts]
-        config[:openvz_opts].each_pair do |k, v|
-          set_option(k, v)
+      def create_container(state)
+        if !File.exists?(File.join(config[:openvz_home], "/template/cache/#{instance.platform.name}.tar.gz"))
+          raise "OpenVZ template #{instance.platform.name} does not exist"
         end
+
+        info("Creating OpenVZ container #{state[:container_id]} from template #{instance.platform.name}")
+        run_command("vzctl create #{state[:container_id]} --ostemplate #{instance.platform.name}")
+
+        configure_container(state)
       end
 
+      def configure_container(state)
+        container_id = state[:container_id]
+        info("Setting IP address of container #{state[:container_id]} to #{state[:hostname]}")
+        set_container_option(state[:container_id], 'ipadd', state[:hostname])
 
-      def set_option(k, v)
-        run_command("vzctl set #{config[:ctid]} --#{k} #{v} --save")
+        info("Setting root account details on container #{state[:container_id]}")
+        set_container_option(state[:container_id], 'userpasswd', "#{config[:username]}:#{config[:password]}")
+
+        info("Setting RAM limit on container #{state[:container_id]} to #{config[:customize][:memory]}")
+        set_container_option(state[:container_id], 'ram', "#{config[:customize][:memory]}M")
+
+        info("Setting swap limit on container #{state[:container_id]} to #{config[:customize][:swap]}")
+        set_container_option(state[:container_id], 'swap', "#{config[:customize][:swap]}M")
+
+        info("Setting CPU count on container #{state[:container_id]} to #{config[:customize][:vcpu]}")
+        set_container_option(state[:container_id], 'cpus', config[:customize][:vcpu])
+
+        info("Setting custom properties #{config[:openvz_opts]} on container #{state[:container_id]}")
+        config[:openvz_opts].each_pair do |option, value|
+          set_container_option(state[:container_id], option, value)
+        end if config[:openvz_opts]
       end
 
-      def mb_to_pages(megabytes)
-        (megabytes.to_f / 4096 * 1024 * 1024).ceil
+      def set_container_option(container_id, option, value)
+        run_command("vzctl set #{container_id} --#{option} #{value} --save")
       end
 
+      def start_container(state)
+        info("Starting OpenVZ container #{state[:container_id]}")
+        run_command("vzctl start #{state[:container_id]}")
+      end
     end
-
   end
 end
-
