@@ -30,7 +30,7 @@ module Kitchen
       end
 
       def destroy(state)
-        if state[:container_id]
+        if state[:container_id] && container_exists(state)
           debug("Destroying container #{state[:container_id]}")
           run_command("vzctl stop #{state[:container_id]}")
           run_command("vzctl destroy #{state[:container_id]}")
@@ -121,6 +121,12 @@ module Kitchen
         authorized_keys_path = File.join(ssh_dir, 'authorized_keys')
         run_command("cp #{config[:ssh_public_key]} #{authorized_keys_path}")
         run_command("chmod 0644 #{authorized_keys_path}")
+      end
+
+      def container_exists(state)
+        output = run_command('vzlist -o ctid -H -a')
+        ids = output.to_s.lines.map { |line| line.to_i }
+        ids.include?(state[:container_id])
       end
     end
   end
