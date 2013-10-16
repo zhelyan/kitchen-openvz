@@ -151,10 +151,12 @@ module Kitchen
       def with_global_mutex(&block)
         lock_file = File.open(LOCK_FILE_PATH, 'w')
         begin
+          debug('Taking mutex')
           lock_file.flock(File::LOCK_EX)
           block.call
         ensure
           lock_file.flock(File::LOCK_UN)
+          debug('Released mutex')
         end
       end
     end
