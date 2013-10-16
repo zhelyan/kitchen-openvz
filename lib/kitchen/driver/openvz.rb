@@ -8,6 +8,7 @@ module Kitchen
     class Openvz < Kitchen::Driver::SSHBase
       DEFAULT_CONTAINER_ID = 101
       DEFAULT_CONTAINER_IP_ADDRESS = '10.1.1.1'
+      LOCK_FILE_PATH = '/var/run/kitchen-openvz.lock'
 
       no_parallel_for :create
 
@@ -41,29 +42,33 @@ module Kitchen
 
       def next_container_id
         info('Generating next container id in sequence')
-        output = run_command('vzlist -o ctid -H -a')
-        taken_ids = output.to_s.lines.map { |line| line.to_i }
-        if taken_ids.any?
-          new_id = taken_ids.max + 1
-          debug("Generated new container id #{new_id}")
-          new_id
-        else
-          debug("No existing containers found, using default id #{DEFAULT_CONTAINER_ID}")
-          DEFAULT_CONTAINER_ID
+        with_global_mutex do 
+          output = run_command('vzlist -o ctid -H -a')
+          taken_ids = output.to_s.lines.map { |line| line.to_i }
+          if taken_ids.any?
+            new_id = taken_ids.max + 1
+            debug("Generated new container id #{new_id}")
+            new_id
+          else
+            debug("No existing containers found, using default id #{DEFAULT_CONTAINER_ID}")
+            DEFAULT_CONTAINER_ID
+          end
         end
       end
 
       def next_ip_address
         info('Generating next IP address in sequence')
-        output = run_command('vzlist -o ip -H -a')
-        taken_ips = parse_ip_addresses(output)
-        if taken_ips.any?
-          new_ip = taken_ips.max.succ.to_s
-          debug("Generated new IP address #{new_ip}")
-          new_ip
-        else
-          debug("No existing IP addresses found, using default #{DEFAULT_CONTAINER_IP_ADDRESS}")
-          DEFAULT_CONTAINER_IP_ADDRESS
+        with_global_mutex do
+          output = run_command('vzlist -o ip -H -a')
+          taken_ips = parse_ip_addresses(output)
+          if taken_ips.any?
+            new_ip = taken_ips.max.succ.to_s
+            debug("Generated new IP address #{new_ip}")
+            new_ip
+          else
+            debug("No existing IP addresses found, using default #{DEFAULT_CONTAINER_IP_ADDRESS}")
+            DEFAULT_CONTAINER_IP_ADDRESS
+          end
         end
       end
 
@@ -141,6 +146,16 @@ module Kitchen
         download_url = "#{OPENVZ_TEMPLATE_URL}/#{name}.tar.gz"
         debug("Downloading OpenVZ template #{name} from #{download_url}")
         run_command("wget #{download_url} -P #{template_directory}")
+      end
+
+      def with_global_mutex(&block)
+        lock_file = File.open(LOCK_FILE_PATH, 'w')
+        begin
+          lock_file.flock(File::LOCK_EX)
+          block.call
+        ensure
+          lock_file.flock(File::LOCK_UN)
+        end
       end
     end
   end
