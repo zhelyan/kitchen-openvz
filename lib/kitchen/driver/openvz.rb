@@ -8,7 +8,6 @@ module Kitchen
     class Openvz < Kitchen::Driver::SSHBase
       DEFAULT_CONTAINER_ID = 101
       DEFAULT_CONTAINER_IP_ADDRESS = '10.1.1.1'
-      LOCK_FILE_PATH = '/var/run/kitchen-openvz.lock'
 
       no_parallel_for :create
 
@@ -19,6 +18,7 @@ module Kitchen
       default_config :ssh_key, '/root/.ssh/id_rsa'
       default_config :ssh_public_key, '/root/.ssh/id_rsa.pub'
       default_config :openvz_home, '/vz'
+      default_config :lock_file, '/var/run/kitchen-openvz.lock'
 
       def create(state)
         state[:container_id] = config[:container_id] || next_container_id
@@ -149,7 +149,7 @@ module Kitchen
       end
 
       def with_global_mutex(&block)
-        lock_file = File.open(LOCK_FILE_PATH, 'w')
+        lock_file = File.open(config[:lock_file], 'w')
         begin
           debug('Taking mutex')
           lock_file.flock(File::LOCK_EX)
