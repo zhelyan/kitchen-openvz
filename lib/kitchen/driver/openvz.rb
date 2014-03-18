@@ -2,6 +2,7 @@ require 'kitchen'
 require 'ipaddr'
 require 'ipaddress'
 require 'net/http'
+require 'fileutils'
 
 module Kitchen
   module Driver
@@ -12,8 +13,9 @@ module Kitchen
       no_parallel_for :create
 
       default_config :use_sudo, true
-      default_config :customize, { :memory => 256, :swap => 512, :vcpu => 1 }
+      default_config :customize, {:memory => 256, :swap => 512, :vcpu => 1}
       default_config :port, 22
+      default_config :shared_folders, [[]]
       default_config :username, 'root'
       default_config :ssh_key, '/root/.ssh/id_rsa'
       default_config :ssh_public_key, '/root/.ssh/id_rsa.pub'
@@ -28,13 +30,18 @@ module Kitchen
         wait_for_sshd(state[:hostname])
         # If ssh is responding then the template has been exploded so we can deploy the ssh key
         deploy_ssh_key(state)
+        mount_folders(state)
       end
 
       def destroy(state)
-        if state[:container_id] && container_exists(state[:container_id])
-          debug("Destroying container #{state[:container_id]}")
-          run_command("vzctl stop #{state[:container_id]}")
-          run_command("vzctl destroy #{state[:container_id]}")
+        begin
+          if state[:container_id] && container_exists(state[:container_id])
+            debug("Destroying container #{state[:container_id]}")
+            run_command("vzctl stop #{state[:container_id]}")
+            run_command("vzctl destroy #{state[:container_id]}")
+          end
+        ensure
+          unmount_folders(state)
         end
       end
 
@@ -42,7 +49,7 @@ module Kitchen
 
       def next_container_id
         info('Generating next container id in sequence')
-        with_global_mutex do 
+        with_global_mutex do
           output = run_command('vzlist -o ctid -H -a')
           taken_ids = output.to_s.lines.map { |line| line.to_i }
           if taken_ids.any?
@@ -159,6 +166,45 @@ module Kitchen
           debug('Released mutex')
         end
       end
+
+      def mount_folders(state)
+        with_shared_folders do |src, dest|
+          info("Mounting host folder [#{src}] to #{state[:container_id]} [#{dest}]")
+          create_folder_if_missing(dest)
+          run_command(temp_mount_cmd(state[:container_id], src, dest))
+        end
+      end
+
+      def unmount_folders(state)
+        with_shared_folders do |src, dest|
+          info("Unmounting container folder [#{dest}]")
+          run_command(umount_cmd(state[:container_id], dest))
+        end
+      end
+
+      def with_shared_folders(&block)
+        unless config[:shared_folders].flatten.empty?
+          config[:shared_folders].map!.each do |src, dest|
+            block.call src, dest
+          end
+        end
+      end
+
+      def create_folder_if_missing(folder)
+        unless File.directory?(folder)
+          info("Container folder #{folder} does not exists, creating..")
+          FileUtils.mkdir_p(folder)
+        end
+      end
+
+      def temp_mount_cmd(ctid, src, dest, readonly=true)
+        "mount -n #{readonly ? '-r' : ''} -t simfs #{src} #{config[:openvz_home]}/root/#{ctid}#{dest} -o #{src}"
+      end
+
+      def umount_cmd(ctid, dest)
+        "umount #{config[:openvz_home]}/root/#{ctid}#{dest}"
+      end
+
     end
   end
 end
