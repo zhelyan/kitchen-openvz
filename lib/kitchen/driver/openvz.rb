@@ -86,10 +86,10 @@ module Kitchen
       end
 
       def create_container(state)
-        if !File.exists?(File.join(config[:openvz_home], "/template/cache/#{instance.platform.name}.tar.gz"))
-          info("OpenVZ template #{instance.platform.name} does not currently exist, will attempt to download...")
-          download_template(instance.platform.name)
-        end
+        #if !File.exists?(File.join(config[:openvz_home], "/template/cache/#{instance.platform.name}.tar.gz"))
+        #  info("OpenVZ template #{instance.platform.name} does not currently exist, will attempt to download...")
+        #  download_template(instance.platform.name)
+        #end
 
         info("Creating OpenVZ container #{state[:container_id]} from template #{instance.platform.name}")
         run_command("vzctl create #{state[:container_id]} --ostemplate #{instance.platform.name}")
