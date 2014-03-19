@@ -25,7 +25,6 @@ module Kitchen
       def create(state)
         state[:container_id] = config[:container_id] || next_container_id
         state[:hostname] = config[:hostname] || next_ip_address
-        state[:shared_folders] ||= config[:shared_folders]
         create_container(state)
         start_container(state)
         mount_folders(state)
@@ -155,7 +154,7 @@ module Kitchen
       end
 
       def mount_folders(state)
-        with_shared_folders(state) do |src, dest|
+        with_shared_folders do |src, dest|
           info("Mounting host folder [#{src}] to #{state[:container_id]} [#{dest}]")
           create_folder_if_missing(state[:container_id], dest)
           run_command(temp_mount_cmd(state[:container_id], src, dest))
@@ -163,7 +162,7 @@ module Kitchen
       end
 
       def unmount_folders(state)
-        with_shared_folders(state) do |src, dest|
+        with_shared_folders do |src, dest|
           # could happen if the kitchen cfg file is changed whilst the container is running
           next unless File.directory?(guest_folder(state[:container_id], dest))
           info("Unmounting container folder [#{dest}]")
@@ -171,9 +170,9 @@ module Kitchen
         end
       end
 
-      def with_shared_folders(state, &block)
-        unless state[:shared_folders].flatten.empty?
-          state[:shared_folders].map!.each do |src, dest|
+      def with_shared_folders(&block)
+        unless config[:shared_folders].flatten.empty?
+          config[:shared_folders].map!.each do |src, dest|
             block.call src, dest
           end
         end

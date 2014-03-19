@@ -1,8 +1,8 @@
 # coding: utf-8
 Gem::Specification.new do |spec|
   spec.name = "kitchen-openvz"
-  spec.version = "0.1.4"
-  spec.authors = ["Zhelyan Panchev"]
+  spec.version = "0.2.4"
+  spec.authors = ["Zhelyan Panchev", "Jared Russel"]
   spec.email = ["jelian@gmail.com"]
   spec.description = %q{Kitchen driver for OpenVZ containers}
   spec.summary = %q{Kitchen driver for OpenVZ containers}
@@ -15,7 +15,7 @@ Gem::Specification.new do |spec|
   spec.test_files = spec.files.grep(%r{^(test|spec|features)/})
   spec.require_paths = ["lib"]
 
-  spec.add_dependency("test-kitchen", ">= 1.0.0.beta.3")
+  spec.add_dependency("test-kitchen", ">= 1.2.1")
 
   spec.add_development_dependency "bundler", "~> 1.3"
   spec.add_development_dependency "rspec"
