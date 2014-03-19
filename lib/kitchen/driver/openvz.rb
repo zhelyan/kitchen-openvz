@@ -35,13 +35,10 @@ module Kitchen
 
       def destroy(state)
         if state[:container_id] && container_exists(state[:container_id])
-          begin
-            debug("Destroying container #{state[:container_id]}")
-            run_command("vzctl stop #{state[:container_id]}")
-            run_command("vzctl destroy #{state[:container_id]}")
-          ensure
-            unmount_folders(state)
-          end
+          unmount_folders(state) rescue nil
+          debug("Destroying container #{state[:container_id]}")
+          run_command("vzctl stop #{state[:container_id]}")
+          run_command("vzctl destroy #{state[:container_id]}")
         end
       end
 
@@ -86,14 +83,11 @@ module Kitchen
       end
 
       def create_container(state)
-        #if !File.exists?(File.join(config[:openvz_home], "/template/cache/#{instance.platform.name}.tar.gz"))
-        #  info("OpenVZ template #{instance.platform.name} does not currently exist, will attempt to download...")
-        #  download_template(instance.platform.name)
-        #end
-
+        unless File.exists?(File.join(config[:openvz_home], "/template/cache/#{instance.platform.name}.tar.gz"))
+          info("OpenVZ template #{instance.platform.name} does not currently exist, will attempt to download...")
+        end
         info("Creating OpenVZ container #{state[:container_id]} from template #{instance.platform.name}")
         run_command("vzctl create #{state[:container_id]} --ostemplate #{instance.platform.name}")
-
         configure_container(state)
       end
 
@@ -146,15 +140,6 @@ module Kitchen
         ids.include?(id)
       end
 
-      OPENVZ_TEMPLATE_URL = 'http://download.openvz.org/template/precreated/'.freeze
-
-      def download_template(name)
-        template_directory = File.join(config[:openvz_home], 'template', 'cache')
-        download_url = "#{OPENVZ_TEMPLATE_URL}/#{name}.tar.gz"
-        debug("Downloading OpenVZ template #{name} from #{download_url}")
-        run_command("wget #{download_url} -P #{template_directory}")
-      end
-
       def with_global_mutex(&block)
         lock_file = File.open(config[:lock_file], 'w')
         begin
@@ -191,7 +176,7 @@ module Kitchen
       end
 
       def create_folder_if_missing(ctid, folder)
-        guest_folder = guest_folder(ctid,folder)
+        guest_folder = guest_folder(ctid, folder)
         unless File.directory?(guest_folder)
           info("Container folder #{folder} does not exists, creating..")
           FileUtils.mkdir_p(guest_folder)
