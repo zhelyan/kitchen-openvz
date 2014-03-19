@@ -27,10 +27,10 @@ module Kitchen
         state[:hostname] = config[:hostname] || next_ip_address
         create_container(state)
         start_container(state)
+        mount_folders(state)
         wait_for_sshd(state[:hostname])
         # If ssh is responding then the template has been exploded so we can deploy the ssh key
         deploy_ssh_key(state)
-        mount_folders(state)
       end
 
       def destroy(state)
@@ -170,7 +170,7 @@ module Kitchen
       def mount_folders(state)
         with_shared_folders do |src, dest|
           info("Mounting host folder [#{src}] to #{state[:container_id]} [#{dest}]")
-          create_folder_if_missing(dest)
+          create_folder_if_missing(state[:container_id], dest)
           run_command(temp_mount_cmd(state[:container_id], src, dest))
         end
       end
@@ -190,19 +190,24 @@ module Kitchen
         end
       end
 
-      def create_folder_if_missing(folder)
-        unless File.directory?(folder)
+      def create_folder_if_missing(ctid, folder)
+        guest_folder = guest_folder(ctid,folder)
+        unless File.directory?(guest_folder)
           info("Container folder #{folder} does not exists, creating..")
-          FileUtils.mkdir_p(folder)
+          FileUtils.mkdir_p(guest_folder)
         end
       end
 
       def temp_mount_cmd(ctid, src, dest, readonly=true)
-        "mount -n #{readonly ? '-r' : ''} -t simfs #{src} #{config[:openvz_home]}/root/#{ctid}#{dest} -o #{src}"
+        "mount -n #{readonly ? '-r' : ''} -t simfs #{src} #{guest_folder(ctid, dest)} -o #{src}"
       end
 
       def umount_cmd(ctid, dest)
-        "umount #{config[:openvz_home]}/root/#{ctid}#{dest}"
+        "umount #{guest_folder(ctid, dest)}"
+      end
+
+      def guest_folder(ctid, folder)
+        "#{config[:openvz_home]}/root/#{ctid}#{folder}"
       end
 
     end
