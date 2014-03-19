@@ -34,14 +34,14 @@ module Kitchen
       end
 
       def destroy(state)
-        begin
-          if state[:container_id] && container_exists(state[:container_id])
+        if state[:container_id] && container_exists(state[:container_id])
+          begin
             debug("Destroying container #{state[:container_id]}")
             run_command("vzctl stop #{state[:container_id]}")
             run_command("vzctl destroy #{state[:container_id]}")
+          ensure
+            unmount_folders(state)
           end
-        ensure
-          unmount_folders(state)
         end
       end
 
