@@ -85,6 +85,7 @@ module Kitchen
       def create_container(state)
         unless File.exists?(File.join(config[:openvz_home], "/template/cache/#{instance.platform.name}.tar.gz"))
           info("OpenVZ template #{instance.platform.name} does not currently exist, will attempt to download...")
+          # openvz handles the download automatically..
         end
         info("Creating OpenVZ container #{state[:container_id]} from template #{instance.platform.name}")
         run_command("vzctl create #{state[:container_id]} --ostemplate #{instance.platform.name}")
@@ -162,6 +163,8 @@ module Kitchen
 
       def unmount_folders(state)
         with_shared_folders do |src, dest|
+          # could happen if the kitchen cfg file is changed whilst the container is running
+          next unless File.directory?(guest_folder(state[:container_id], dest))
           info("Unmounting container folder [#{dest}]")
           run_command(umount_cmd(state[:container_id], dest))
         end
