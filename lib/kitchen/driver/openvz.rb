@@ -155,6 +155,7 @@ module Kitchen
 
       def mount_folders(state)
         with_shared_folders do |src, dest|
+          raise "Host folder #{src} does not exist!" unless File.directory?(src)
           info("Mounting host folder [#{src}] to #{state[:container_id]} [#{dest}]")
           create_folder_if_missing(state[:container_id], dest)
           run_command(temp_mount_cmd(state[:container_id], src, dest))
@@ -171,18 +172,18 @@ module Kitchen
       end
 
       def with_shared_folders(&block)
-        unless config[:shared_folders].flatten.empty?
-          config[:shared_folders].map!.each do |src, dest|
+        unless config[:shared_folders].join.to_s.strip.empty?
+          config[:shared_folders].map do |src, dest|
             block.call src, dest
           end
         end
       end
 
       def create_folder_if_missing(ctid, folder)
-        guest_folder = guest_folder(ctid, folder)
-        unless File.directory?(guest_folder)
+        gst_folder = guest_folder(ctid, folder)
+        unless File.directory?(gst_folder)
           info("Container folder #{folder} does not exists, creating..")
-          FileUtils.mkdir_p(guest_folder)
+          FileUtils.mkdir_p(gst_folder)
         end
       end
 
