@@ -83,11 +83,12 @@ module Kitchen
       end
 
       def create_container(state)
-        unless File.exists?(File.join(config[:openvz_home], "/template/cache/#{instance.platform.name}.tar.gz"))
+        if File.exists?(File.join(config[:openvz_home], "/template/cache/#{instance.platform.name}.tar.gz"))
+          info("Creating OpenVZ container #{state[:container_id]} from template #{instance.platform.name}")
+        else
           info("OpenVZ template #{instance.platform.name} does not currently exist, will attempt to download...")
-          # openvz handles the download automatically..
+          # openvz handles the download ..
         end
-        info("Creating OpenVZ container #{state[:container_id]} from template #{instance.platform.name}")
         run_command("vzctl create #{state[:container_id]} --ostemplate #{instance.platform.name}")
         configure_container(state)
       end
@@ -182,17 +183,19 @@ module Kitchen
       def create_folder_if_missing(ctid, folder)
         gst_folder = guest_folder(ctid, folder)
         unless File.directory?(gst_folder)
-          info("Container folder #{folder} does not exists, creating..")
-          FileUtils.mkdir_p(gst_folder)
+          debug("Container folder #{folder} does not exists, creating..")
+          run_command("sudo mkdir -p #{gst_folder}")
         end
       end
 
       def temp_mount_cmd(ctid, src, dest, readonly=true)
-        "mount -n #{readonly ? '-r' : ''} -t simfs #{src} #{guest_folder(ctid, dest)} -o #{src}"
+        cmd = "sudo mount -n #{readonly ? '-r' : ''} -t simfs #{src} #{guest_folder(ctid, dest)} -o #{src}"
+        debug("Executing #{cmd}")
       end
 
       def umount_cmd(ctid, dest)
-        "umount #{guest_folder(ctid, dest)}"
+        cmd = "sudo umount #{guest_folder(ctid, dest)}"
+        debug("Executing #{cmd}")
       end
 
       def guest_folder(ctid, folder)
