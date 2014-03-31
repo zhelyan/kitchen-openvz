@@ -184,17 +184,17 @@ module Kitchen
         gst_folder = guest_folder(ctid, folder)
         unless File.directory?(gst_folder)
           debug("Container folder #{folder} does not exists, creating..")
-          run_command("sudo mkdir -p #{gst_folder}")
+          run_command("mkdir -p #{gst_folder}")
         end
       end
 
       def temp_mount_cmd(ctid, src, dest, readonly=true)
-        cmd = "sudo mount -n #{readonly ? '-r' : ''} -t simfs #{src} #{guest_folder(ctid, dest)} -o #{src}"
+        cmd = "mount -n #{readonly ? '-r' : ''} -t simfs #{src} #{guest_folder(ctid, dest)} -o #{src}"
         debug("Executing #{cmd}")
       end
 
       def umount_cmd(ctid, dest)
-        cmd = "sudo umount #{guest_folder(ctid, dest)}"
+        cmd = "umount #{guest_folder(ctid, dest)}"
         debug("Executing #{cmd}")
       end
 
