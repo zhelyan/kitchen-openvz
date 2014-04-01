@@ -2,6 +2,7 @@ require 'kitchen'
 require 'ipaddr'
 require 'ipaddress'
 require 'net/http'
+require 'fileutils'
 
 module Kitchen
   module Driver
@@ -12,8 +13,9 @@ module Kitchen
       no_parallel_for :create
 
       default_config :use_sudo, true
-      default_config :customize, { :memory => 256, :swap => 512, :vcpu => 1 }
+      default_config :customize, {:memory => 256, :swap => 512, :vcpu => 1}
       default_config :port, 22
+      default_config :shared_folders, [[]]
       default_config :username, 'root'
       default_config :ssh_key, '/root/.ssh/id_rsa'
       default_config :ssh_public_key, '/root/.ssh/id_rsa.pub'
@@ -25,6 +27,7 @@ module Kitchen
         state[:hostname] = config[:hostname] || next_ip_address
         create_container(state)
         start_container(state)
+        mount_folders(state)
         wait_for_sshd(state[:hostname])
         # If ssh is responding then the template has been exploded so we can deploy the ssh key
         deploy_ssh_key(state)
@@ -32,6 +35,7 @@ module Kitchen
 
       def destroy(state)
         if state[:container_id] && container_exists(state[:container_id])
+          unmount_folders(state) rescue nil
           debug("Destroying container #{state[:container_id]}")
           run_command("vzctl stop #{state[:container_id]}")
           run_command("vzctl destroy #{state[:container_id]}")
@@ -42,7 +46,7 @@ module Kitchen
 
       def next_container_id
         info('Generating next container id in sequence')
-        with_global_mutex do 
+        with_global_mutex do
           output = run_command('vzlist -o ctid -H -a')
           taken_ids = output.to_s.lines.map { |line| line.to_i }
           if taken_ids.any?
@@ -79,14 +83,13 @@ module Kitchen
       end
 
       def create_container(state)
-        if !File.exists?(File.join(config[:openvz_home], "/template/cache/#{instance.platform.name}.tar.gz"))
+        if File.exists?(File.join(config[:openvz_home], "/template/cache/#{instance.platform.name}.tar.gz"))
+          info("Creating OpenVZ container #{state[:container_id]} from template #{instance.platform.name}")
+        else
           info("OpenVZ template #{instance.platform.name} does not currently exist, will attempt to download...")
-          download_template(instance.platform.name)
+          # openvz handles the download ..
         end
-
-        info("Creating OpenVZ container #{state[:container_id]} from template #{instance.platform.name}")
         run_command("vzctl create #{state[:container_id]} --ostemplate #{instance.platform.name}")
-
         configure_container(state)
       end
 
@@ -139,15 +142,6 @@ module Kitchen
         ids.include?(id)
       end
 
-      OPENVZ_TEMPLATE_URL = 'http://download.openvz.org/template/precreated/'.freeze
-
-      def download_template(name)
-        template_directory = File.join(config[:openvz_home], 'template', 'cache')
-        download_url = "#{OPENVZ_TEMPLATE_URL}/#{name}.tar.gz"
-        debug("Downloading OpenVZ template #{name} from #{download_url}")
-        run_command("wget #{download_url} -P #{template_directory}")
-      end
-
       def with_global_mutex(&block)
         lock_file = File.open(config[:lock_file], 'w')
         begin
@@ -159,6 +153,55 @@ module Kitchen
           debug('Released mutex')
         end
       end
+
+      def mount_folders(state)
+        with_shared_folders do |src, dest|
+          raise "Host folder #{src} does not exist!" unless File.directory?(src)
+          info("Mounting host folder [#{src}] to #{state[:container_id]} [#{dest}]")
+          create_folder_if_missing(state[:container_id], dest)
+          run_command(temp_mount_cmd(state[:container_id], src, dest))
+        end
+      end
+
+      def unmount_folders(state)
+        with_shared_folders do |src, dest|
+          # could happen if the kitchen cfg file is changed whilst the container is running
+          next unless File.directory?(guest_folder(state[:container_id], dest))
+          info("Unmounting container folder [#{dest}]")
+          run_command(umount_cmd(state[:container_id], dest))
+        end
+      end
+
+      def with_shared_folders(&block)
+        unless config[:shared_folders].join.to_s.strip.empty?
+          config[:shared_folders].map do |src, dest|
+            block.call src, dest
+          end
+        end
+      end
+
+      def create_folder_if_missing(ctid, folder)
+        gst_folder = guest_folder(ctid, folder)
+        unless File.directory?(gst_folder)
+          debug("Container folder #{folder} does not exists, creating..")
+          run_command("mkdir -p #{gst_folder}")
+        end
+      end
+
+      def temp_mount_cmd(ctid, src, dest, readonly=true)
+        cmd = "mount -n #{readonly ? '-r' : ''} -t simfs #{src} #{guest_folder(ctid, dest)} -o #{src}"
+        debug("Executing #{cmd}")
+      end
+
+      def umount_cmd(ctid, dest)
+        cmd = "umount #{guest_folder(ctid, dest)}"
+        debug("Executing #{cmd}")
+      end
+
+      def guest_folder(ctid, folder)
+        "#{config[:openvz_home]}/root/#{ctid}#{folder}"
+      end
+
     end
   end
 end
