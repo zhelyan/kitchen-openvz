@@ -1,19 +1,21 @@
 ---
 driver_plugin: openvz
-driver_config:
-  require_chef_omnibus: true
 
 platforms:
 - name: ubuntu-13.04
   driver_config:
+     require_chef_omnibus: true
+     openvz_home: /data01/openvz
      shared_folders: [['/host/folder1', '/guest/folder1'], ['/host/folder2', '/guest/folder2']]
-     network: 10.2.2.0/24
-     template: ubuntu-1304-x86
-     memory_mb: 64
+     ssh_key: /data01/jenkins/workspace/.ssh/id_rsa
+     ssh_public_key: /data01/jenkins/workspace/.ssh/id_rsa.pub
+     lock_file: /data01/jenkins/workspace/kitchen-openvz.lock
+     customize:
+       memory: 2048
+       swap: 128
+       vcpu: 2
      openvz_opts:
-       cpus: 2
-
-
+       nameserver: 8.8.8.8
 suites:
 - name: default
   run_list: []

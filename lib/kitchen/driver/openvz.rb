@@ -20,6 +20,7 @@ module Kitchen
       default_config :ssh_key, '/root/.ssh/id_rsa'
       default_config :ssh_public_key, '/root/.ssh/id_rsa.pub'
       default_config :openvz_home, '/vz'
+      default_config :openvz_opts, {}
       default_config :lock_file, '/var/run/kitchen-openvz.lock'
 
       def create(state)
@@ -127,7 +128,7 @@ module Kitchen
       end
 
       def deploy_ssh_key(state)
-        ssh_dir = File.join(config[:openvz_home], 'root', state[:container_id].to_s, 'root', '.ssh')
+        ssh_dir = guest_folder(state[:container_id], '/root/.ssh')
         run_command("mkdir -p #{ssh_dir}")
         run_command("chmod 0700 #{ssh_dir}")
 
