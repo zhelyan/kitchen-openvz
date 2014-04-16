@@ -1,6 +1,6 @@
 # Kitchen::Openvz
 
-Use OpenVZ containers with test-kitchen
+Use OpenVZ containers with test-kitchen.
 
 ## Installation
 
@@ -23,25 +23,72 @@ Or install it yourself as:
 - RHEL / CENTOS.
 
 
-## Usage
+## Options
 
-Look at the included .kitchen.yml for an example
+### use_sudo
 
-*Notes*
+Whether to use sudo or not.
 
-* Container IDs:
- * OpenVZ allocates an unique `ctid` to each container. The driver will do this for you in increments of 1. Should you need to explicitly set the ctid for you container, use the `ctid` option
+### port
 
-* Network:
- * NAT : refer to the OpenVZ guide to setup NAT and provide Internet access to the container/s/ :: https://openvz.org/Using_NAT_for_container_with_private_IPs
- * the `network` setting takes single ip or CIDR notation, i.e:: 10.1.1.7 or  10.1.1.0/24; there is no default, the driver will allocate one automatically for you looking for free ips in 10.1.1.0/24 excluding the broadcast address.
-||
-* Authentication:
- * by default `/root/.ssh/id_rsa.pub` is used, override with the `ssh_public_key` option
- * if no public key is found, the driver will fall back to password authentication; defaults to root:root
-||
-* Options:
- * specify `vzctl set` options under the `customize` option
+SSH port to bind to.
+
+### container_id
+
+The container `CTID`. The driver will auto increment this it finds that it is already taken.
+Defaults to:: `101`
+
+### hostname
+
+Container IP address. The driver will autoincrement it if it is already taken. Defaults to:: `10.1.1.1`
+
+### shared_folders
+
+One or more host folders mounts i.e. `[['/host/folder1', '/guest/folder1'], ['/host/folder2', '/guest/folder2']]`
+
+### openvz_home
+
+Path to openvz home. Defaults to: `/vz`.
+
+
+### lock_file
+
+Where to create the lock file. This is needed as sometimes the `create` action needs to query other running containers to i.e. auto increment IPs/CTIDs.
+Defaults to:: `/var/run/kitchen-openvz.lock`.
+
+### ssh_public_key
+
+Path to the SSH public key to use. Defaults to:: `/root/.ssh/id_rsa.pub`
+
+### customize
+
+The customize section is provided for convenience since the `vzctl set` commands are slightly cryptic. It contains 3 settings `memory, swap, vcpu` allowing users to set RAM, swap and CPU count respectively.
+The same result can be achieved by passing the equivalent settings in the `openvz_opts` section /see below/. Moreover, if duplicated, options specified in `openvz_opts` take precedence.
+
+#### memory
+
+Container RAM limit. Defaults to:: 256MB. Use only digits when specifying in the kitchen file.
+
+#### swap
+
+Container swap memory. Defaults to:: 512MB. Same remark as in `memory`.
+
+#### vcpu
+
+Number of CPUs. Defaults to:: `1`
+
+### openvz_opts
+
+Extra options to pass to `vzctl set`. Note that anything under here will be passed to `vzctl set` as is.
+
+
+## Example:
+
+Look at the included `example_.kitchen.yml`.
+
+## Notes
+
+NAT : refer to the OpenVZ guide to setup NAT and provide Internet access to the container(s) :: https://openvz.org/Using_NAT_for_container_with_private_IPs
 
 ## Contributing
 
