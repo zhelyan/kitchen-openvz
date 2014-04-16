@@ -2,8 +2,6 @@
 
 Use OpenVZ containers with test-kitchen
 
-OpenVZ can run on both hardware node or a VM i.e. you can have virtualized containers for your tests runing in a Vagrant VM
-
 ## Installation
 
 Add this line to your application's Gemfile:
@@ -21,8 +19,8 @@ Or install it yourself as:
 ## Requirements
 
 - OpenVZ installed on your machine or VM, please refer to:: http://openvz.org/Quick_installation
-- one or more containers in /vz/templates/cache, have a look here:: http://openvz.org/Download/template/precreated; Containers will be downloaded automatically if they don't exist if you specify the container filename in .kitchen.yml
-- RHEL / CENTOS 6; It is possible to install OpenVZ on 5 as well but not as easy as on 6
+- one or more containers in /vz/templates/cache, have a look here:: http://openvz.org/Download/template/precreated; Containers will be downloaded automatically if they don't exist.
+- RHEL / CENTOS.
 
 
 ## Usage
@@ -43,10 +41,7 @@ Look at the included .kitchen.yml for an example
  * if no public key is found, the driver will fall back to password authentication; defaults to root:root
 ||
 * Options:
- * specify `vzctl set` options under the `openvz_opts` option
- * `before_converge` takes multiline text, each line will be executed as is on the host before convergence
- * use `memory_mb` to allocate memory /in MB/ to the container. Note that the value specified here will override any memory options you might have set in `openvz_opts`.
-
+ * specify `vzctl set` options under the `customize` option
 
 ## Contributing
 

@@ -1,11 +1,11 @@
 # coding: utf-8
 Gem::Specification.new do |spec|
   spec.name = "kitchen-openvz"
-  spec.version = "0.2.5"
+  spec.version = "0.2.6"
   spec.authors = ["Zhelyan Panchev", "Jared Russel"]
   spec.email = ["zhelyan.panchev@accenture.com"]
-  spec.description = %q{Kitchen driver for OpenVZ containers}
-  spec.summary = %q{Kitchen driver for OpenVZ containers}
+  spec.description = %q{OpenVZ driver for test-kitchen}
+  spec.summary = %q{OpenVZ driver for test-kitchen}
   spec.homepage = ""
   spec.license = "Apache 2"
   spec.has_rdoc = false
